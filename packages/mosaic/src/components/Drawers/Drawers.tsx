@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 
 import type { DrawersProps } from "./DrawersTypes";
 
@@ -14,11 +14,48 @@ const slotProps = {
 	},
 };
 
+const focusableSelector = [
+	"a[href]",
+	"button:not([disabled])",
+	"input:not([disabled]):not([type='hidden'])",
+	"select:not([disabled])",
+	"textarea:not([disabled])",
+	"[contenteditable='true']",
+	"[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function isVisible(element: HTMLElement) {
+	if (element.closest("[hidden], [aria-hidden='true'], [inert]") || element.getAttribute("aria-disabled") === "true") {
+		return false;
+	}
+
+	let current: HTMLElement | null = element;
+	while (current) {
+		const style = window.getComputedStyle(current);
+		if (style.display === "none" || style.visibility === "hidden") {
+			return false;
+		}
+		current = current.parentElement;
+	}
+
+	return true;
+}
+
 function Drawers<T>(props: DrawersProps<T>) {
 	// For each drawer we store a boolean indicating whether that drawer is open (true) or closed (false)
 	const [bools, setBools] = useState<boolean[]>([]);
 	// Stores whether the Drawer system is currently animating. If no animation is being performed animating === false.
 	const [animating, setAnimating] = useState(false);
+	const paperRefs = useRef<(HTMLDivElement | null)[]>([]);
+	const focusFrame = useRef<number | undefined>(undefined);
+	const drawersLength = useRef(props.drawers.length);
+	drawersLength.current = props.drawers.length;
+
+	useEffect(() => () => {
+		if (focusFrame.current !== undefined) {
+			window.cancelAnimationFrame(focusFrame.current);
+		}
+	}, []);
 
 	useEffect(() => {
 		if (
@@ -45,8 +82,33 @@ function Drawers<T>(props: DrawersProps<T>) {
 	/**
 	 * Called when the animation for a drawer entering the UI is complete
 	 */
-	const onEntered = useCallback(() => {
+	const onEntered = useCallback((index: number) => {
 		setAnimating(false);
+
+		if (focusFrame.current !== undefined) {
+			window.cancelAnimationFrame(focusFrame.current);
+		}
+
+		focusFrame.current = window.requestAnimationFrame(() => {
+			const paper = paperRefs.current[index];
+			if (!paper?.isConnected || index !== drawersLength.current - 1) {
+				return;
+			}
+
+			const activeElement = document.activeElement;
+			if (activeElement !== paper && activeElement instanceof HTMLElement && paper.contains(activeElement)) {
+				return;
+			}
+
+			const heading = Array.from(paper.querySelectorAll<HTMLElement>("h1, h2")).find(isVisible);
+			const focusable = Array.from(paper.querySelectorAll<HTMLElement>(focusableSelector)).find(isVisible);
+			const target = heading ?? focusable ?? paper;
+
+			if (heading === target && !heading.hasAttribute("tabindex")) {
+				heading.tabIndex = -1;
+			}
+			target.focus();
+		});
 	}, []);
 
 	/**
@@ -83,13 +145,19 @@ function Drawers<T>(props: DrawersProps<T>) {
 						anchor="right"
 						SlideProps={{
 							appear: true,
-							onEntered: onEntered,
+							onEntered: () => onEntered(i),
 							onExited: onExited,
 						}}
 						transitionDuration={ANIMATION_DURATION}
 						PaperProps={{
 							className,
 							component: PaperDiv,
+							ref: (element: HTMLDivElement | null) => {
+								paperRefs.current[i] = element;
+							},
+							tabIndex: -1,
+							role: "dialog",
+							"aria-modal": true,
 						}}
 						slotProps={slotProps}
 						data-testid={testIds.DRAWER}

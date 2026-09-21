@@ -32,6 +32,80 @@ describe(__dirname, () => {
 		expect(await screen.findByText("Drawer 2")).toBeInTheDocument();
 	});
 
+	it("focuses the first heading after the drawer content renders", async () => {
+		await setup({
+			drawers: [drawers[0]],
+			children: (drawer) => (
+				<>
+					<button>Before heading</button>
+					<h1>{drawer.title}</h1>
+				</>
+			),
+		});
+
+		const heading = await screen.findByRole("heading", { name: "Drawer 1" });
+		await waitFor(() => expect(heading).toHaveFocus());
+		expect(heading.closest("[role='dialog']")).toHaveAttribute("aria-modal", "true");
+	});
+
+	it("focuses the first control when there is no heading", async () => {
+		await setup({
+			drawers: [drawers[0]],
+			children: () => (
+				<>
+					<h2 hidden>Hidden heading</h2>
+					<button disabled>Disabled</button>
+					<button hidden>Hidden</button>
+					<button>Available</button>
+				</>
+			),
+		});
+
+		await waitFor(() => expect(screen.getByRole("button", { name: "Available" })).toHaveFocus());
+	});
+
+	it("focuses the dialog when it has no focusable content", async () => {
+		await setup({ drawers: [drawers[0]] });
+
+		const dialog = await screen.findByRole("dialog");
+		await waitFor(() => expect(dialog).toHaveFocus());
+		expect(dialog).toHaveAttribute("tabindex", "-1");
+	});
+
+	it("only focuses content in the topmost drawer", async () => {
+		await setup({ children: (drawer) => <h2>{drawer.title}</h2> });
+
+		await waitFor(() => expect(screen.getByRole("heading", { name: "Drawer 2" })).toHaveFocus());
+		expect(screen.getByText("Drawer 1")).not.toHaveFocus();
+	});
+
+	it("does not steal focus when drawer content rerenders", async () => {
+		const { rerender } = await setup({
+			drawers: [drawers[0]],
+			children: () => (
+				<>
+					<h2>Heading</h2>
+					<button>Keep focus</button>
+				</>
+			),
+		});
+		const button = await screen.findByRole("button", { name: "Keep focus" });
+		button.focus();
+
+		rerender(
+			<Drawers drawers={[drawers[0]]}>
+				{() => (
+					<>
+						<h2>Updated heading</h2>
+						<button>Keep focus</button>
+					</>
+				)}
+			</Drawers>,
+		);
+
+		expect(button).toHaveFocus();
+	});
+
 	it("should not render any draws if there are none defined", async () => {
 		await setup({ drawers: [] });
 
