@@ -25,7 +25,10 @@ const focusableSelector = [
 ].join(",");
 
 function isVisible(element: HTMLElement) {
-	if (element.closest("[hidden], [aria-hidden='true'], [inert]") || element.getAttribute("aria-disabled") === "true") {
+	if (
+		element.matches(":disabled") ||
+		element.closest("[hidden], [aria-hidden='true'], [aria-disabled='true'], [inert]")
+	) {
 		return false;
 	}
 
@@ -39,6 +42,24 @@ function isVisible(element: HTMLElement) {
 	}
 
 	return true;
+}
+
+function focusFirst(elements: HTMLElement[]) {
+	for (const element of elements) {
+		if (!isVisible(element)) {
+			continue;
+		}
+
+		if (/^H[12]$/.test(element.tagName) && !element.hasAttribute("tabindex")) {
+			element.tabIndex = -1;
+		}
+		element.focus();
+		if (document.activeElement === element) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 function Drawers<T>(props: DrawersProps<T>) {
@@ -100,14 +121,12 @@ function Drawers<T>(props: DrawersProps<T>) {
 				return;
 			}
 
-			const heading = Array.from(paper.querySelectorAll<HTMLElement>("h1, h2")).find(isVisible);
-			const focusable = Array.from(paper.querySelectorAll<HTMLElement>(focusableSelector)).find(isVisible);
-			const target = heading ?? focusable ?? paper;
+			const headings = Array.from(paper.querySelectorAll<HTMLElement>("h1, h2"));
+			const focusable = Array.from(paper.querySelectorAll<HTMLElement>(focusableSelector));
 
-			if (heading === target && !heading.hasAttribute("tabindex")) {
-				heading.tabIndex = -1;
+			if (!focusFirst(headings) && !focusFirst(focusable)) {
+				paper.focus();
 			}
-			target.focus();
 		});
 	}, []);
 

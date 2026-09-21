@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import React, { act } from "react";
 import userEvent from "@testing-library/user-event";
+import { vi } from "vitest";
 
 import type { DrawersProps } from "@root/components/Drawers";
 
@@ -64,6 +65,36 @@ describe(__dirname, () => {
 		await waitFor(() => expect(screen.getByRole("button", { name: "Available" })).toHaveFocus());
 	});
 
+	it("skips controls disabled by a fieldset", async () => {
+		await setup({
+			drawers: [drawers[0]],
+			children: () => (
+				<>
+					<fieldset disabled>
+						<input aria-label="Disabled input" />
+					</fieldset>
+					<button>Enabled control</button>
+				</>
+			),
+		});
+
+		await waitFor(() => expect(screen.getByRole("button", { name: "Enabled control" })).toHaveFocus());
+	});
+
+	it("does not re-include disabled controls with a tabindex", async () => {
+		await setup({
+			drawers: [drawers[0]],
+			children: () => (
+				<>
+					<button disabled tabIndex={0}>Disabled</button>
+					<button>Enabled control</button>
+				</>
+			),
+		});
+
+		await waitFor(() => expect(screen.getByRole("button", { name: "Enabled control" })).toHaveFocus());
+	});
+
 	it("focuses the dialog when it has no focusable content", async () => {
 		await setup({ drawers: [drawers[0]] });
 
@@ -104,6 +135,52 @@ describe(__dirname, () => {
 		);
 
 		expect(button).toHaveFocus();
+	});
+
+	it("does not refocus when async content arrives after the dialog fallback", async () => {
+		const { rerender } = await setup({ drawers: [drawers[0]] });
+		const dialog = await screen.findByRole("dialog");
+		await waitFor(() => expect(dialog).toHaveFocus());
+
+		rerender(
+			<Drawers drawers={[drawers[0]]}>
+				{() => <button>Loaded control</button>}
+			</Drawers>,
+		);
+
+		expect(await screen.findByRole("button", { name: "Loaded control" })).not.toHaveFocus();
+		expect(dialog).toHaveFocus();
+	});
+
+	it("cancels queued focus when the drawers unmount", async () => {
+		const frames = new Map<number, FrameRequestCallback>();
+		let nextFrame = 1;
+		const requestFrame = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+			const id = nextFrame++;
+			frames.set(id, callback);
+			return id;
+		});
+		const cancelFrame = vi.spyOn(window, "cancelAnimationFrame").mockImplementation((id) => {
+			frames.delete(id);
+		});
+
+		try {
+			const { unmount } = await setup({
+				drawers: [drawers[0]],
+				children: () => <h1>Queued heading</h1>,
+			});
+			await screen.findByRole("heading", { name: "Queued heading" });
+			await waitFor(() => expect(requestFrame).toHaveBeenCalled());
+			const focusFrameId = nextFrame - 1;
+
+			unmount();
+
+			expect(cancelFrame).toHaveBeenCalledWith(focusFrameId);
+			expect(frames.has(focusFrameId)).toBe(false);
+		} finally {
+			requestFrame.mockRestore();
+			cancelFrame.mockRestore();
+		}
 	});
 
 	it("should not render any draws if there are none defined", async () => {
