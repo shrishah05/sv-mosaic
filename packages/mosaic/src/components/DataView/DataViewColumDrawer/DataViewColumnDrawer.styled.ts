@@ -4,7 +4,7 @@ import { Text } from "@root/components/Typography";
 
 export const StyledWrapper = styled.div`
 	height: 100%;
-	width: 700px;
+	width: min(700px, 100vw);
 `;
 
 export const ColumnItem = styled.div<{ $isDragging?: boolean }>`
