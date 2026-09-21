@@ -9,6 +9,23 @@ import userEvent from "@testing-library/user-event";
 const allColumns: DataViewColumnControlProps["allColumns"] = [{ name: "column1", label: "Column 1" }, { name: "column2", label: "Column 2" }];
 const columns: DataViewColumnControlProps["columns"] = [{ name: "column1", label: "Column 1" }];
 
+function LiveRegionHarness() {
+	const [activeColumnNames, setActiveColumnNames] = React.useState(["column1"]);
+	const activeColumns = activeColumnNames.reduce<DataViewColumnControlProps["columns"]>((result, name) => {
+		const column = allColumns.find(item => item.name === name);
+
+		return column ? [...result, column] : result;
+	}, []);
+
+	return (
+		<DataViewColumnControl
+			allColumns={allColumns}
+			columns={activeColumns}
+			onChange={setActiveColumnNames}
+		/>
+	);
+}
+
 async function setup(props: Partial<DataViewColumnControlProps> = {}) {
 	const onChangeMock = props.onChange || vi.fn();
 
@@ -42,5 +59,26 @@ describe(__dirname, () => {
 		expect(screen.queryByText("DataView.column_settings")).not.toBeInTheDocument();
 		await user.click(button);
 		expect(screen.queryByText("DataView.column_settings")).toBeInTheDocument();
+	});
+
+	it("should announce each applied column update once", async () => {
+		const user = userEvent.setup();
+		await act(() => render(<LiveRegionHarness />));
+
+		expect(screen.getByRole("status")).toBeEmptyDOMElement();
+
+		await user.click(screen.getByRole("button", { name: "DataView.columns" }));
+		await user.click(screen.getByRole("checkbox", { name: "Column 2" }));
+		await user.click(screen.getByRole("button", { name: "Apply" }));
+
+		expect(screen.getByRole("status")).toHaveTextContent("Columns updated. 2 columns now visible.");
+		expect(screen.getAllByRole("status")).toHaveLength(1);
+
+		await user.click(screen.getByRole("button", { name: "DataView.columns" }));
+		await user.click(screen.getByRole("button", { name: "Remove Column 2 column" }));
+		await user.click(screen.getByRole("button", { name: "Apply" }));
+
+		expect(screen.getByRole("status")).toHaveTextContent("Columns updated. 1 column now visible.");
+		expect(screen.getAllByRole("status")).toHaveLength(1);
 	});
 });
