@@ -38,6 +38,16 @@ describe(__dirname, () => {
 		expect(screen.queryByTestId(testIds.DRAWER_BACKDROP)).toBeNull();
 	});
 
+	it("should call onClose when Escape is pressed", async () => {
+		const onClose = vi.fn();
+		const { user } = await setup({ onClose });
+
+		await screen.findByText("Drawer 2");
+		await user.keyboard("{Escape}");
+
+		expect(onClose).toHaveBeenCalledTimes(1);
+	});
+
 	it("should begin closing a draw once the definition is removed", async () => {
 		const { rerender } = await setup();
 
