@@ -154,6 +154,35 @@ describe("Form section nav focus management", () => {
 		expect(document.activeElement).toBe(screen.getByRole("heading", { level: 3, name: "Section B" }));
 	});
 
+	it("does not submit the form when a section nav link is activated with Enter", async () => {
+		const user = userEvent.setup();
+		const onSubmit = vi.fn();
+
+		function TestFormWithSubmit() {
+			const controller = useForm();
+
+			return (
+				<Form
+					{...controller}
+					title="Test Form"
+					fields={fields}
+					sections={sections}
+					onSubmit={onSubmit}
+				/>
+			);
+		}
+
+		render(<TestFormWithSubmit />);
+
+		const navLink = getNavLink("Section B");
+		navLink.focus();
+		await user.keyboard("{Enter}");
+
+		expect(document.activeElement).toBe(screen.getByRole("heading", { level: 3, name: "Section B" }));
+		expect(navLink).toHaveAttribute("type", "button");
+		expect(onSubmit).not.toHaveBeenCalled();
+	});
+
 	it("wires each section's aria-controls to its own real, unique content id instead of the hardcoded placeholder", () => {
 		render(<TestForm />);
 
